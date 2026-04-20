@@ -1,6 +1,7 @@
 import os
 from services.llm_service import ask_llm
 
+
 # ---------------- TEXT EXTRACTION ----------------
 def extract_text(file_path):
     try:
@@ -30,15 +31,17 @@ def extract_text(file_path):
         return ""
 
 
-# ---------------- ROLE EXTRACTION (FIXED LLM) ----------------
+# ---------------- ROLE EXTRACTION (STRONG FIX) ----------------
 def extract_job_role_llm(text):
     try:
         prompt = f"""
-        Extract ONLY the job title from this resume.
+        Extract the BEST job role from this resume.
 
-        RULES:
-        - Only 2 or 3 words
+        STRICT RULES:
+        - Only return job title
+        - Max 3 words
         - No explanation
+        - No punctuation
         - No sentence
 
         Examples:
@@ -53,35 +56,59 @@ def extract_job_role_llm(text):
         response = ask_llm(prompt)
 
         if not response:
-            return ""
+            return "Python Developer"
 
-        # ✅ CLEAN OUTPUT
+        # ✅ CLEAN OUTPUT HARD FILTER
         role = response.strip().split("\n")[0]
 
-        for word in ["based", "resume", "candidate", "job", "role", "is"]:
-            role = role.lower().replace(word, "")
+        # remove unwanted words
+        unwanted = [
+            "based", "resume", "candidate", "job",
+            "role", "is", "the", "best", "from",
+            "this", "only", "title"
+        ]
 
-        role = role.replace(".", "").replace(":", "").strip()
+        role = role.lower()
 
+        for word in unwanted:
+            role = role.replace(word, "")
+
+        # remove symbols
+        for ch in [".", ":", "-", "_", "|"]:
+            role = role.replace(ch, "")
+
+        role = " ".join(role.split())
+
+        # keep only first 3 words
         role = " ".join(role.split()[:3])
 
-        return role
+        # ✅ fallback safety
+        if len(role) < 3:
+            return "Python Developer"
+
+        return role.title()
 
     except Exception as e:
         print("LLM role extraction error:", e)
-        return ""
-# ---------------- SKILLS EXTRACTION (FOR RECRUITER MODE) ----------------
+        return "Python Developer"
+
+
+# ---------------- SKILLS EXTRACTION (IMPROVED) ----------------
 def extract_skills_llm(text):
     try:
         prompt = f"""
-        Extract key technical skills from this resume.
+        Extract important technical skills from this resume.
+
+        RULES:
+        - Only skills
+        - Comma separated
+        - No explanation
+
+        Example:
+        Python, SQL, Machine Learning, Flask
 
         Resume:
         {text}
-
-        Return ONLY skills separated by commas.
-        Example:
-        Python, SQL, Machine Learning, Flask
         """
 
         response = ask_llm(prompt)
@@ -89,9 +116,18 @@ def extract_skills_llm(text):
         if not response:
             return []
 
-        skills = response.split(",")
+        # ✅ CLEAN OUTPUT
+        skills = response.replace("\n", "").split(",")
 
-        return [s.strip() for s in skills if s.strip()]
+        clean_skills = []
+        for s in skills:
+            s = s.strip().lower()
+
+            # remove noise words
+            if len(s) > 1 and not any(x in s for x in ["resume", "skills", "based"]):
+                clean_skills.append(s)
+
+        return clean_skills[:10]  # limit
 
     except Exception as e:
         print("Skill extraction error:", e)
