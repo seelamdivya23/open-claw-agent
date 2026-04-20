@@ -36,3 +36,43 @@ def find_jobs_for_candidate(resume_text):
     matched_jobs.sort(key=lambda x: x["score"], reverse=True)
 
     return matched_jobs
+
+# ---------------- APPLY TO JOBS ----------------
+def apply_to_jobs(jobs):
+
+    applied = []
+
+    for job in jobs:
+
+        applied.append({
+            "title": job["title"],
+            "company": job["company"],
+            "url": job["url"],
+            "score": job.get("score", 0)
+        })
+
+    return applied
+
+
+
+# ---------------- DAILY SUMMARY ----------------
+def get_daily_candidate_summary(jobs):
+
+    summary = "📊 DAILY CANDIDATE REPORT\n\n"
+
+    for job in jobs:
+
+        title = job.get("title", "N/A")
+        company = job.get("company", "N/A")
+        score = job.get("score", 0)
+    
+
+        summary += f"""
+🏢 {title} - {company}
+⭐ Match Score: {score}%
+
+------------------------
+"""
+
+    return summary
+

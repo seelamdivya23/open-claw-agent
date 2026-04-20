@@ -1,8 +1,9 @@
 import os
+import re
 from services.llm_service import ask_llm
 
 
-# ---------------- TEXT EXTRACTION ----------------
+# ---------------- TEXT EXTRACTION (UNCHANGED) ----------------
 def extract_text(file_path):
     try:
         if file_path.endswith(".txt"):
@@ -31,103 +32,100 @@ def extract_text(file_path):
         return ""
 
 
-# ---------------- ROLE EXTRACTION (STRONG FIX) ----------------
+# ---------------- ROLE EXTRACTION (UNCHANGED AS YOU REQUESTED) ----------------
 def extract_job_role_llm(text):
     try:
         prompt = f"""
-        Extract the BEST job role from this resume.
+Extract ONLY the job role from this resume.
 
-        STRICT RULES:
-        - Only return job title
-        - Max 3 words
-        - No explanation
-        - No punctuation
-        - No sentence
+RULES:
+- Only job title
+- Max 3 words
+- No explanation
+- No extra text
 
-        Examples:
-        Python Developer
-        Data Scientist
-        Backend Engineer
-
-        Resume:
-        {text}
-        """
+Resume:
+{text}
+"""
 
         response = ask_llm(prompt)
 
         if not response:
             return "Python Developer"
 
-        # ✅ CLEAN OUTPUT HARD FILTER
         role = response.strip().split("\n")[0]
 
-        # remove unwanted words
-        unwanted = [
-            "based", "resume", "candidate", "job",
-            "role", "is", "the", "best", "from",
-            "this", "only", "title"
+        # remove garbage words
+        bad_words = [
+            "extract", "resume", "job", "role", "title",
+            "candidate", "based", "analysis", "the"
         ]
 
         role = role.lower()
 
-        for word in unwanted:
-            role = role.replace(word, "")
+        for w in bad_words:
+            role = role.replace(w, "")
 
-        # remove symbols
-        for ch in [".", ":", "-", "_", "|"]:
-            role = role.replace(ch, "")
-
+        role = role.replace(".", "").replace(":", "").replace("-", "")
         role = " ".join(role.split())
 
-        # keep only first 3 words
         role = " ".join(role.split()[:3])
 
-        # ✅ fallback safety
-        if len(role) < 3:
+        if len(role.strip()) < 3:
             return "Python Developer"
 
         return role.title()
 
     except Exception as e:
-        print("LLM role extraction error:", e)
+        print("Role extraction error:", e)
         return "Python Developer"
 
 
-# ---------------- SKILLS EXTRACTION (IMPROVED) ----------------
+# ---------------- SKILLS EXTRACTION (🔥 FIXED VERSION) ----------------
 def extract_skills_llm(text):
     try:
         prompt = f"""
-        Extract important technical skills from this resume.
+Extract technical skills from resume.
 
-        RULES:
-        - Only skills
-        - Comma separated
-        - No explanation
+RULES:
+- Return ONLY comma separated skills
+- No explanation
+- No sentences
 
-        Example:
-        Python, SQL, Machine Learning, Flask
+Example:
+Python, SQL, Flask, Machine Learning
 
-        Resume:
-        {text}
-        """
+Resume:
+{text}
+"""
 
         response = ask_llm(prompt)
 
         if not response:
             return []
 
-        # ✅ CLEAN OUTPUT
-        skills = response.replace("\n", "").split(",")
+        # 🔥 CLEAN TEXT FIRST
+        response = response.replace("\n", " ").lower()
+
+        # 🔥 EXTRACT WORDS MORE INTELLIGENTLY
+        raw_skills = re.split(r",|\|", response)
 
         clean_skills = []
-        for s in skills:
-            s = s.strip().lower()
 
-            # remove noise words
-            if len(s) > 1 and not any(x in s for x in ["resume", "skills", "based"]):
-                clean_skills.append(s)
+        for skill in raw_skills:
+            skill = skill.strip()
 
-        return clean_skills[:10]  # limit
+            # remove garbage words
+            if (
+                len(skill) > 1
+                and not any(x in skill for x in ["resume", "skills", "experience", "based"])
+            ):
+                clean_skills.append(skill)
+
+        # remove duplicates while preserving order
+        final_skills = list(dict.fromkeys(clean_skills))
+
+        return final_skills[:10]
 
     except Exception as e:
         print("Skill extraction error:", e)

@@ -3,164 +3,206 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, Messa
 
 from config import TELEGRAM_TOKEN
 
-from agents.recruiter_agent import find_candidates
-from agents.candidate_agent import find_jobs_for_candidate
+from agents.recruiter_agent import (
+    find_candidates,
+    generate_daily_summary
+)
+
+from agents.candidate_agent import (
+    find_jobs_for_candidate,
+    apply_to_jobs,
+    get_daily_candidate_summary
+)
 
 from services.resume_parser import extract_text
-from services.email_service import generate_email
+
+from services.email_service import (
+    generate_candidate_application_email,
+    generate_recruiter_followup_email,
+    send_email
+)
+
 from services.job_post_service import generate_recruiter_job_post
+
 
 import os
 import time
 
 
-# ---------------- SPLIT LONG MESSAGE ----------------
+# ---------------- SPLIT MESSAGE ----------------
 async def send_long_message(update, text):
-    max_length = 4000
-    for i in range(0, len(text), max_length):
-        await update.message.reply_text(text[i:i+max_length])
+    for i in range(0, len(text), 4000):
+        await update.message.reply_text(text[i:i+4000])
 
 
 # ---------------- START ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🤖 AI Recruiter Bot Ready!\n\n"
-        "📌 Commands:\n"
-        "/recruit <job description> - Find candidates\n"
-        "/jobs - Get job matches\n\n"
-        "📄 Or upload your resume (PDF/TXT/DOCX)"
+        "/recruit <job desc> - Recruiter pipeline\n"
+        "/jobs - Candidate job search + email draft\n"
+        "/summary - Candidate daily summary\n"
     )
 
 
-# ---------------- RECRUITER MODE ----------------
+# ---------------- RECRUITER FLOW ----------------
 async def recruit(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         job_desc = " ".join(context.args)
 
         if not job_desc:
-            await update.message.reply_text("❗ Provide job description")
-            return
+            return await update.message.reply_text("❗ Provide job description")
 
+        await update.message.reply_text("🤖 Running Full AI Recruiter Pipeline...")
+
+        # STEP 1: Find candidates
         results = find_candidates(job_desc)
 
-        response = "📊 Top Candidates:\n\n"
-
-        for r in results[:5]:
-            skills = ", ".join(r["skills"]) if r["skills"] else "Not detected"
-
-            response += f"👤 {r['name']}\n"
-            response += f"⭐ Score: {r['score']}%\n"
-            response += f"🛠 Skills: {skills}\n\n"
-
+        # STEP 2: Post job (internal board)
         job_post = generate_recruiter_job_post(job_desc)
 
-        response += "📢 Job Post:\n"
-        response += job_post
+        # STEP 3: Prepare response
+        response = f"""
+📌 FULL AI RECRUITER PIPELINE REPORT
+----------------------------------------
+
+🧾 JOB DESCRIPTION:
+{job_desc}
+
+📢 JOB POSTED (FREE INTERNAL BOARD):
+{job_post}
+
+----------------------------------------
+👥 CANDIDATE SCREENING RESULTS:
+"""
+
+        # STEP 4: Process candidates
+        for r in results:
+
+            skills = ", ".join(r["skills"]) if r["skills"] else "Not detected"
+
+            email = generate_recruiter_followup_email(
+                r["name"],
+                job_desc,
+                skills
+            )
+
+            # send email
+            send_email(
+                to_email="divyaseelam83@gmail.com",
+                subject="Interview Opportunity",
+                body=email
+            )
+
+            response += f"""
+👤 Candidate: {r['name']}
+⭐ Score: {r['score']}
+🛠 Skills: {skills}
+
+📧 Follow-up Email Sent:
+{email}
+
+----------------------------------------
+"""
+
+        # STEP 5: Sort + Daily Summary
+        results_sorted = sorted(results, key=lambda x: x["score"], reverse=True)
+
+        summary = "📊 DAILY SUMMARY (BEST → WORST):\n"
+
+        for r in results_sorted:
+            summary += f"\n{r['name']} - Score: {r['score']}"
+
+        response += "\n" + summary
 
         await send_long_message(update, response)
 
     except Exception as e:
-        print("Error in recruit:", e)
+        print("Recruit error:", e)
         await update.message.reply_text("❌ Error in recruit")
 
 
-# ---------------- JOBS COMMAND ----------------
+# ---------------- JOBS (CANDIDATE FLOW) ----------------
 async def jobs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        print("Jobs command received")
-
         resume_text = extract_text("data/resumes/resume1.txt")
 
         jobs_list = find_jobs_for_candidate(resume_text)
 
         if not jobs_list:
-            await update.message.reply_text("❌ No jobs found")
-            return
+            return await update.message.reply_text("❌ No jobs found")
 
-        response = "💼 Job Matches:\n\n"
+        response = "💼 JOB MATCHES:\n\n"
 
-        for job in jobs_list[:3]:
-            response += f"🏢 {job['title']} - {job['company']}\n"
-            response += f"🔗 {job['url']}\n"
-            response += f"⭐ Match: {job['score']}%\n\n"
+        # apply jobs (simulation)
+        applied_jobs = apply_to_jobs(jobs_list[:3])
+
+        for job in applied_jobs:
+
+            email_text = generate_candidate_application_email(
+                "Candidate",
+                job["title"],
+                job["company"]
+            )
+
+            response += f"""
+🏢 {job['title']} - {job['company']}
+⭐ Match Score: {job['score']}%
+🔗 {job['url']}
+
+📧 Email Draft:
+{email_text}
+
+---------------------
+"""
 
         await send_long_message(update, response)
 
-        # ✅ Email Draft
-        top_job = jobs_list[0]
-
-        email_text = generate_email(
-            "Divya Seelam",
-            top_job["title"],
-            top_job["company"]
-        )
-
-        await update.message.reply_text("✉️ Email Draft:")
-        await send_long_message(update, email_text)
-
     except Exception as e:
-        print("Error in jobs:", e)
+        print("Jobs error:", e)
         await update.message.reply_text("❌ Error in jobs")
+
+
+
+
 
 
 # ---------------- RESUME UPLOAD ----------------
 async def upload_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        document = update.message.document
+        doc = update.message.document
 
-        if document is None:
-            await update.message.reply_text("❌ Please upload a file")
-            return
+        if not doc:
+            return await update.message.reply_text("❌ Upload file")
 
-        file_name = document.file_name
-
-        if not file_name.endswith((".txt", ".pdf", ".docx")):
-            await update.message.reply_text("❌ Only TXT, PDF, DOCX supported")
-            return
-
-        file = await document.get_file()
+        file = await doc.get_file()
 
         os.makedirs("data/resumes", exist_ok=True)
 
-        filename = f"{int(time.time())}_{file_name}"
-        path = f"data/resumes/{filename}"
-
+        path = f"data/resumes/{doc.file_name}"
         await file.download_to_drive(path)
 
-        await update.message.reply_text("✅ Resume uploaded successfully!")
+        await update.message.reply_text("✅ Resume uploaded")
 
         resume_text = extract_text(path)
 
         jobs_list = find_jobs_for_candidate(resume_text)
 
-        if not jobs_list:
-            await update.message.reply_text("❌ No jobs found")
-            return
-
-        response = "💼 Job Matches:\n\n"
+        response = "💼 JOB MATCHES:\n\n"
 
         for job in jobs_list[:3]:
-            response += f"🏢 {job['title']} - {job['company']}\n"
-            response += f"🔗 {job['url']}\n"
-            response += f"⭐ Match: {job['score']}%\n\n"
+            response += f"""
+🏢 {job['title']} - {job['company']}
+⭐ Match Score: {job['score']}%
+🔗 {job.get('url', 'No link available')}
+---------------------
+"""
 
         await send_long_message(update, response)
 
-        # ✅ Email Draft
-        top_job = jobs_list[0]
-
-        email_text = generate_email(
-            "Divya Seelam",
-            top_job["title"],
-            top_job["company"]
-        )
-
-        await update.message.reply_text("✉️ Email Draft:")
-        await send_long_message(update, email_text)
-
     except Exception as e:
-        print("Error in upload:", e)
-        await update.message.reply_text("❌ Error processing resume")
+        print("Upload error:", e)
+        await update.message.reply_text("❌ Error")
 
 
 # ---------------- MAIN ----------------
