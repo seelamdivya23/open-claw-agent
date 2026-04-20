@@ -1,47 +1,52 @@
 import requests
-from config import OPENAI_API_KEY
+
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODEL_NAME = "tinyllama"
+
 
 def ask_llm(prompt):
     try:
-        url = "https://api.openai.com/v1/chat/completions"
+        response = requests.post(
+            OLLAMA_URL,
+            json={
+                "model": MODEL_NAME,
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=60  # ✅ prevents hanging
+        )
 
-        headers = {
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        data = response.json()
 
-        data = {
-            "model": "gpt-4o-mini",
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.3
-        }
+        # ✅ Debug if needed
+        # print("LLM RAW:", data)
 
-        response = requests.post(url, headers=headers, json=data)
-        result = response.json()
+        if "response" in data:
+            text = data["response"].strip()
 
-        # DEBUG (optional)
-        # print(result)
+            # ✅ CLEAN OUTPUT (VERY IMPORTANT)
+            text = text.replace("\n\n", "\n")
 
-        return result["choices"][0]["message"]["content"].strip()
+            return text
+
+        else:
+            print("LLM ERROR:", data)
+            return fallback_response(prompt)
 
     except Exception as e:
-        print("LLM Error:", e)
+        print("LLM Exception:", e)
         return fallback_response(prompt)
 
 
-# ✅ FALLBACK (if API fails)
+# ✅ SMART FALLBACK
 def fallback_response(prompt):
-    prompt = prompt.lower()
+    if "job role" in prompt.lower():
+        return "Software Engineer"
 
-    if "job role" in prompt:
-        return "Python Developer"
+    if "job description" in prompt.lower():
+        return "We are hiring a Software Engineer with relevant skills."
 
-    if "skills" in prompt:
-        return "python, sql, machine learning"
+    if "email" in prompt.lower():
+        return "Dear Candidate, we are interested in your profile."
 
-    if "email" in prompt:
-        return "Dear Hiring Manager, I am interested in this role."
-
-    return "Python Developer"
+    return "Unable to process request"

@@ -4,7 +4,7 @@ from config import ADZUNA_APP_ID, ADZUNA_APP_KEY
 
 def search_jobs(query):
     try:
-        print("🔍 Searching jobs for:", query)
+        print("🔍 Searching jobs:", query)
 
         url = "https://api.adzuna.com/v1/api/jobs/in/search/1"
 
@@ -19,33 +19,28 @@ def search_jobs(query):
         response = requests.get(url, params=params)
         data = response.json()
 
-        print("📡 API FULL RESPONSE:", data)
+        jobs = data.get("results", [])
 
-        jobs = []
+        if not jobs:
+            print("⚠️ No results, fallback used")
 
-        # ✅ If API returns empty → try fallback
-        if not data.get("results"):
-            print("⚠️ No results, trying fallback...")
-
-            fallback_query = "software developer"
-
-            params["what"] = fallback_query
+            params["what"] = "software developer"
             response = requests.get(url, params=params)
             data = response.json()
+            jobs = data.get("results", [])
 
-            print("📡 FALLBACK RESPONSE:", data)
+        result = []
 
-        # ✅ Extract jobs
-        for job in data.get("results", []):
-            jobs.append({
+        for job in jobs:
+            result.append({
                 "title": job.get("title", "N/A"),
                 "company": job.get("company", {}).get("display_name", "N/A"),
                 "description": job.get("description", ""),
-                "url": job.get("redirect_url") or job.get("url", "")
+                "url": job.get("redirect_url", "")
             })
 
-        return jobs
+        return result
 
     except Exception as e:
-        print("❌ Job API Error:", e)
+        print("Job API Error:", e)
         return []
