@@ -9,9 +9,6 @@ from agents.candidate_agent import find_jobs_for_candidate
 from services.resume_parser import extract_text
 from services.email_service import generate_email
 from services.job_post_service import generate_recruiter_job_post
-from services.db_service import init_db, save_job, get_today_jobs
-
-
 
 import os
 import time
@@ -26,14 +23,13 @@ async def send_long_message(update, text):
 
 # ---------------- START ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-   await update.message.reply_text(
-    "🤖 AI Recruiter Bot Ready!\n\n"
-    "📌 Commands:\n"
-    "/recruit <job description> - Find candidates\n"
-    "/jobs - Get job matches\n"
-    "/summary - View daily applied jobs\n\n"
-    "📄 Or upload your resume (PDF/TXT/DOCX)"
-)
+    await update.message.reply_text(
+        "🤖 AI Recruiter Bot Ready!\n\n"
+        "📌 Commands:\n"
+        "/recruit <job description> - Find candidates\n"
+        "/jobs - Get job matches\n\n"
+        "📄 Or upload your resume (PDF/TXT/DOCX)"
+    )
 
 
 # ---------------- RECRUITER MODE ----------------
@@ -56,7 +52,6 @@ async def recruit(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response += f"⭐ Score: {r['score']}%\n"
             response += f"🛠 Skills: {skills}\n\n"
 
-        # ✅ Job Post (LLM)
         job_post = generate_recruiter_job_post(job_desc)
 
         response += "📢 Job Post:\n"
@@ -69,38 +64,33 @@ async def recruit(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Error in recruit")
 
 
-# ---------------- JOBS COMMAND (CANDIDATE) ----------------
+# ---------------- JOBS COMMAND ----------------
 async def jobs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         print("Jobs command received")
 
-        # ✅ 1. Read resume
         resume_text = extract_text("data/resumes/resume1.txt")
 
-        # ✅ 2. Find jobs
         jobs_list = find_jobs_for_candidate(resume_text)
 
         if not jobs_list:
             await update.message.reply_text("❌ No jobs found")
             return
 
-        # ✅ 3. Job Matches
         response = "💼 Job Matches:\n\n"
 
         for job in jobs_list[:3]:
-            save_job(job['title'], job['company'], job['url'])
-
             response += f"🏢 {job['title']} - {job['company']}\n"
             response += f"🔗 {job['url']}\n"
             response += f"⭐ Match: {job['score']}%\n\n"
 
         await send_long_message(update, response)
 
-        # ✅ 4. Email Draft (IMPORTANT CHANGE)
+        # ✅ Email Draft
         top_job = jobs_list[0]
 
         email_text = generate_email(
-            "Candidate",
+            "Divya Seelam",
             top_job["title"],
             top_job["company"]
         )
@@ -111,7 +101,6 @@ async def jobs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print("Error in jobs:", e)
         await update.message.reply_text("❌ Error in jobs")
-
 
 
 # ---------------- RESUME UPLOAD ----------------
@@ -140,7 +129,6 @@ async def upload_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text("✅ Resume uploaded successfully!")
 
-        # ✅ SAME FLOW AS /jobs
         resume_text = extract_text(path)
 
         jobs_list = find_jobs_for_candidate(resume_text)
@@ -152,19 +140,17 @@ async def upload_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = "💼 Job Matches:\n\n"
 
         for job in jobs_list[:3]:
-            save_job(job['title'], job['company'], job['url'])
-
             response += f"🏢 {job['title']} - {job['company']}\n"
             response += f"🔗 {job['url']}\n"
             response += f"⭐ Match: {job['score']}%\n\n"
 
         await send_long_message(update, response)
 
-        # ✅ FIXED EMAIL
+        # ✅ Email Draft
         top_job = jobs_list[0]
 
         email_text = generate_email(
-            "Your Name",
+            "Divya Seelam",
             top_job["title"],
             top_job["company"]
         )
@@ -176,40 +162,15 @@ async def upload_resume(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print("Error in upload:", e)
         await update.message.reply_text("❌ Error processing resume")
 
-async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        jobs = get_today_jobs()
-
-        if not jobs:
-            await update.message.reply_text("📊 No jobs applied today")
-            return
-
-        response = "📊 Daily Job Summary\n\n"
-        response += f"📝 Applied Today: {len(jobs)}\n\n"
-
-        for i, job in enumerate(jobs, 1):
-            response += f"{i}. {job['title']} - {job['company']}\n"
-
-        await update.message.reply_text(response)
-
-    except Exception as e:
-        print("Error in summary:", e)
-        await update.message.reply_text("❌ Error in summary")
-
-
 
 # ---------------- MAIN ----------------
 def main():
-    init_db() 
-
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("recruit", recruit))
     app.add_handler(CommandHandler("jobs", jobs))
     app.add_handler(MessageHandler(filters.Document.ALL, upload_resume))
-    app.add_handler(CommandHandler("summary", summary))
-
 
     print("🚀 Bot started...")
     app.run_polling()
