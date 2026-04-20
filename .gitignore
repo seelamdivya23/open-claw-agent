@@ -1,0 +1,17 @@
+# Ignore config (VERY IMPORTANT)
+config.py
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+aienv/
+venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
