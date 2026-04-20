@@ -1,0 +1,24 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Deploy to EC2 via SSH
+      uses: appleboy/ssh-action@v0.1.10
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: Administrator
+        password: ${{ secrets.EC2_PASSWORD }}
+        script: |
+          cd open-claw-agent
+          git pull
+          pip install -r requirements.txt
+          taskkill /IM python.exe /F || true
+          start python app.py
