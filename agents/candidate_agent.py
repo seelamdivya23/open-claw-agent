@@ -75,4 +75,3 @@ def get_daily_candidate_summary(jobs):
 """
 
     return summary
-

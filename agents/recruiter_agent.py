@@ -152,4 +152,3 @@ def run_recruiter_agent(job_desc):
         "report": report,
         "job_post": job_post
     }
-
